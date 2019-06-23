@@ -4,15 +4,14 @@
   closedCount: Int,
   condition: gitbucket.core.service.IssuesService.IssueSearchCondition,
   filter: String,
-  groups: List[String])(implicit context: gitbucket.core.controller.Context)
-@import context._
-@import gitbucket.core.view.helpers._
-@html.main("Pull Requests"){
-  <div class="body">
-    @dashboard.html.tab("pulls")
+  groups: List[String],
+  recentRepositories: List[gitbucket.core.service.RepositoryService.RepositoryInfo])(implicit context: gitbucket.core.controller.Context)
+@gitbucket.core.html.main("Pull requests"){
+  @gitbucket.core.dashboard.html.sidebar(recentRepositories){
+    @gitbucket.core.dashboard.html.tab("pulls")
     <div class="container">
-      @issuesnavi(filter, "pulls", condition)
-      @issueslist(issues, page, openCount, closedCount, condition, filter, groups)
+      @gitbucket.core.dashboard.html.issuesnavi("pulls", filter, openCount, closedCount, condition)
+      @gitbucket.core.dashboard.html.issueslist(issues, page, openCount, closedCount, condition, filter, groups)
     </div>
-  </div>
+  }
 }

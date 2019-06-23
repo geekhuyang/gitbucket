@@ -4,76 +4,115 @@
   commits: Seq[Seq[gitbucket.core.util.JGitUtil.CommitInfo]],
   page: Int,
   hasNext: Boolean,
-  hasWritePermission: Boolean)(implicit context: gitbucket.core.controller.Context)
-@import context._
-@import gitbucket.core.view.helpers._
-@html.main(s"${repository.owner}/${repository.name}", Some(repository)) {
-  @html.menu("code", repository){
+  hasWritePermission: Boolean,
+  getStatuses: String => List[gitbucket.core.model.CommitStatus],
+  getSummary: List[gitbucket.core.model.CommitStatus] => (gitbucket.core.model.CommitState, String),
+  getTags: String => List[String])(implicit context: gitbucket.core.controller.Context)
+@import gitbucket.core.view.helpers
+@gitbucket.core.html.main(s"${repository.owner}/${repository.name}", Some(repository)) {
+  @gitbucket.core.html.menu("files", repository){
     <div class="head">
       @if(pathList.isEmpty){
-        @helper.html.branchcontrol(
-          branch,
-          repository,
-          hasWritePermission
-        ){
+        @gitbucket.core.helper.html.branchcontrol(branch, repository, hasWritePermission){
           @repository.branchList.map { x =>
-            <li><a href="@url(repository)/commits/@encodeRefName(x)">@helper.html.checkicon(x == branch) @x</a></li>
+            <li><a href="@helpers.url(repository)/commits/@helpers.encodeRefName(x)">@gitbucket.core.helper.html.checkicon(x == branch) @x</a></li>
           }
         }
       }
       @if(pathList.nonEmpty){
         <span class="muted">History for</span>
-        <a class="strong" href="@url(repository)/tree/@encodeRefName(branch)">@repository.name</a> /
+        <a class="strong" href="@helpers.url(repository)/tree/@helpers.encodeRefName(branch)">@repository.name</a> /
         @pathList.zipWithIndex.map { case (section, i) =>
           @if(i == pathList.length - 1){
             <span class="strong">@section</span>
           } else {
-            <a class="strong" href="@url(repository)/tree/@encodeRefName(branch)/@pathList.take(i + 1).mkString("/")">@section</a> /
+            <a class="strong" href="@helpers.url(repository)/tree/@helpers.encodeRefName((branch :: pathList.take(i + 1)).mkString("/"))">@section</a> /
           }
         }
       }
     </div>
-    <div class="commit-list">
-      @commits.map { day =>
-        <div class="muted" style="background-color: white;">
-          <i class="octicon octicon-git-commit"></i> Commits on @date(day.head.commitTime)
-        </div>
-        <div class="list-group box-commits">
-          @day.map { commit =>
-            <div class="list-group-item">
-              <ul class="nav nav-pills pull-right">
-                <li><a href="@url(repository)/commit/@commit.id" class="link monospace" style="line-height: 16px;">@commit.id.substring(0, 7)</a></li>
-                <li><a href="@url(repository)/tree/@commit.id" style="line-height: 16px;"><i class="octicon octicon-code link"></i></a></li>
-              </ul>
-              <div>
-                <div class="commit-avatar-image">@avatarLink(commit, 40)</div>
-                <div>
-                  <a href="@url(repository)/commit/@commit.id" class="commit-message" style="font-weight: bold;">@link(commit.summary, repository)</a>
-                  @if(commit.description.isDefined){
-                    <a href="javascript:void(0)" onclick="$('#description-@commit.id').toggle();" class="omit">...</a>
-                  }
-                  <br>
-                  @if(commit.description.isDefined){
-                    <pre id="description-@commit.id" style="display: none;" class="commit-description">@link(commit.description.get, repository)</pre>
-                  }
-                  <div style="margin-top: 2px;">
-                    @user(commit.authorName, commit.authorEmailAddress, "username")
-                    <span class="muted">authored @helper.html.datetimeago(commit.authorTime)</span>
-                    @if(commit.isDifferentFromAuthor) {
-                      <span class="octicon octicon-arrow-right" style="margin-top : -2px;"></span>
-                      @user(commit.committerName, commit.committerEmailAddress, "username")
-                      <span class="muted">committed @helper.html.datetimeago(commit.authorTime)</span>
+
+    <table class="table table-bordered table-hover">
+    @commits.map { day =>
+      <tr>
+        <th rowspan="@day.size" width="100">@helpers.date(day.head.commitTime)</th>
+        @day.zipWithIndex.map { case (commit, i) =>
+          @if(i != 0){ <tr> }
+          <td>
+            <div class="pull-right text-right">
+              @if(commit.commitSign.isDefined){
+                @commit.verified.map{ v =>
+                  <span class="gpg-verified" data-toggle="tooltip" title="Signed by @v.signedUser (@v.signedKeyId)">Verified</span>
+                }.getOrElse{
+                  <span class="gpg-unverified">Unverified</span>
+                }
+              }
+              @defining(getTags(commit.id)) { tags =>
+                @if(tags.nonEmpty){
+                  <span class="muted">
+                    <i class="octicon octicon-tag"></i>
+                    @tags.map { tag =>
+                      <a href="@helpers.url(repository)/tree/@tag" class="tag">@tag</a>
                     }
-                  </div>
+                  </span>
+                }
+              }
+              <a href="@helpers.url(repository)/commit/@commit.id" class="monospace commit-message strong"><i class="octicon octicon-diff" style="color: black;"></i>@commit.id.substring(0, 7)</a><br>
+              <a href="@helpers.url(repository)/tree/@commit.id" class="button-link">Browse files »</a>
+            </div>
+            <div>
+              <div class="commit-avatar-image">@helpers.avatarLink(commit, 40)</div>
+              <div>
+                @helpers.link(commit.summary, repository)
+                @if(commit.description.isDefined){
+                  <a href="javascript:void(0)" onclick="$('#description-@commit.id').toggle();" class="omit">...</a>
+                }
+                <br>
+                @if(commit.description.isDefined){
+                  <pre id="description-@commit.id" style="display: none;" class="commit-description">@helpers.link(commit.description.get, repository)</pre>
+                }
+                  <div>
+                  @if(commit.isDifferentFromAuthor) {
+                    @helpers.user(commit.authorName, commit.authorEmailAddress, "username")
+                    <span class="muted">authored @gitbucket.core.helper.html.datetimeago(commit.authorTime)</span>
+                    <span class="octicon octicon-arrow-right" style="margin-top : -2px;"></span>
+                  }
+                  @helpers.user(commit.committerName, commit.committerEmailAddress, "username")
+                  <span class="muted">committed @gitbucket.core.helper.html.datetimeago(commit.commitTime)</span>
+                    @defining({
+                      val statuses = getStatuses(commit.id)
+                      val (summary, summaryText) = getSummary(statuses)
+                      (statuses, summary, summaryText)
+                    }){ case (statuses, summaryState, summaryText) =>
+                      @if(statuses.nonEmpty){
+                        @helpers.commitStateIcon(summaryState)
+                        <strong class="text-@{summaryState.name}">@helpers.commitStateText(summaryState, commit.id)</strong>
+                        <span class="text-@{summaryState.name}">- @summaryText checks</span>
+                        <a href="#" class="toggle-check">Show all checks</a>
+                        <div style="display: none;">
+                          @statuses.map{ status =>
+                          <div class="build-status-item">
+                            <span class="build-status-icon text-@{status.state.name}">@helpers.commitStateIcon(status.state)</span>
+                            <strong>@status.context</strong>
+                            @status.description.map { desc => <span class="muted">- @desc</span> }
+                            <span>
+                              @status.targetUrl.map { url => - <a href="@url">Details</a> }
+                            </span>
+                          </div>
+                          }
+                        </div>
+                      }
+                    }
                 </div>
               </div>
             </div>
-          }
-        </div>
-      }
-    </div>
+          </td>
+          </tr>
+        }
+    }
+    </table>
 
-    <nav style="text-align: center; margin-top: 30px">
+    <nav style="text-align: center; margin-top: 20px">
       <ul class="pagination">
         @if(page <= 1){
           <li class="disabled"><span>Newer</span></li>
@@ -87,5 +126,27 @@
         }
       </ul>
     </nav>
+    <script>
+      $(function () {
+        $('[data-toggle="tooltip"]').tooltip();
+
+        $('.toggle-check').click(function(){
+          var div = $(this).next('div');
+          if(div.is(':visible')){
+            $(this).text('Show all checks');
+          } else {
+            $(this).text('Hide all checks');
+          }
+          div.toggle();
+          return false;
+        });
+      })
+    </script>
+    <style type="text/css">
+      a.tag {
+        color: #888888;
+        margin-right: 4px;
+      }
+    </style>
   }
 }
